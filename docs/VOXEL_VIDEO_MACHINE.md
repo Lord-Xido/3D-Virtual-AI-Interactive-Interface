@@ -1,17 +1,17 @@
 # 2048³ Virtual Video Animation Machine
 
-## 1. Address space
+## 1. System definition
 
-The virtual world is
+The machine represents a time-varying virtual field:
 
 \[
-\mathcal{V}_t[x,y,z], \qquad 0 \le x,y,z < 2048.
+\mathcal V_t[x,y,z],\qquad 0\le x,y,z<2048.
 \]
 
-Because `2048 = 2¹¹`, each axis uses 11 bits and the complete coordinate uses 33 bits:
+Because `2048 = 2¹¹`, each coordinate axis requires 11 bits and a complete coordinate requires 33 bits:
 
 \[
-N = 2048^3 = 2^{33} = 8,589,934,592.
+N=2048^3=2^{33}=8,589,934,592.
 \]
 
 The row-major address is
@@ -20,35 +20,42 @@ The row-major address is
 A(x,y,z)=x+2048y+2048^2z.
 \]
 
+The virtual dimensions describe the addressable domain. They do not imply dense physical allocation.
+
 ## 2. Sparse brick memory
 
-The world is divided into `32³` bricks:
+The world is divided into `32³` bricks. Each address splits into a 6-bit brick coordinate and a 5-bit local coordinate on every axis:
 
-- local voxel coordinate: 5 bits per axis;
-- brick coordinate: 6 bits per axis;
-- bricks per axis: `2048 / 32 = 64`;
-- virtual bricks: `64³ = 262,144`.
+\[
+(x,y,z)\rightarrow(b_x,b_y,b_z,l_x,l_y,l_z).
+\]
 
-Only active bricks are resident. A page table maps virtual brick IDs to runtime state. The demonstration stores compact page metadata and renders a bounded sample through a GPU instance pool rather than allocating the dense volume.
+This produces a `64³` virtual brick lattice containing 262,144 possible bricks. The browser runtime keeps no more than 900 page records resident and renders at most 12,000 instanced voxel samples.
+
+The page table tracks demand priority, last-touch frame, semantic state and field heat. A velocity-led camera predictor requests likely future pages. Low-value pages are removed through a score combining priority, heat and age.
 
 ## 3. Runtime state
+
+The conceptual state is
 
 \[
 \Sigma_t=(V_t,Z_t,M_t,P_t,E_t,\Omega_t,G_t,C_t,L_t,R_t,A_t,Q_t).
 \]
 
 - `V`: virtual voxel field;
-- `Z`: encoded/latent state;
-- `M`: material and physical state;
+- `Z`: encoded or latent state;
+- `M`: material and physical metadata;
 - `P`: predicted state and page demand;
-- `E`: residual;
+- `E`: prediction or rendering residual;
 - `Ω`: persistent correction memory;
 - `G`: scene geometry and transforms;
-- `C`: camera;
-- `L`: lighting;
+- `C`: camera state;
+- `L`: lighting state;
 - `R`: rendered frame;
-- `A`: audio/capture synchronization;
-- `Q`: scheduler and page queue.
+- `A`: capture or audiovisual synchronization state;
+- `Q`: scheduler, page table and execution queues.
+
+The browser demonstration operationalizes a bounded subset of these registers while preserving the full state contract for future render backends.
 
 ## 4. Three-bit semantic state
 
@@ -58,57 +65,95 @@ Only active bricks are resident. A page table maps virtual brick IDs to runtime 
 | `001` | geometry |
 | `010` | emissive |
 | `011` | volumetric medium |
-| `100` | dynamic/particle |
-| `101` | latent/AI-controlled |
-| `110` | control/bytecode |
-| `111` | residual/compound |
+| `100` | dynamic or particle |
+| `101` | latent or AI-controlled |
+| `110` | control or bytecode |
+| `111` | residual or compound |
 
-The 3-bit value is a semantic selector. Rich properties remain in optional channels or procedural functions.
+The 3-bit value selects an operational class. Rich properties remain in optional channels or procedural functions.
 
-## 5. Frame transition
+## 5. Deterministic fixed-step transition
+
+Display refresh and simulation time are separated. The display uses `requestAnimationFrame`; the simulation advances in fixed increments:
+
+\[
+\Delta t=\frac{1}{60}\text{ s}.
+\]
+
+The transition is
 
 \[
 \Sigma_{t+\Delta t}=\Pi_\Lambda\left[
-\Sigma_t+\mathcal{F}_{animation}+\mathcal{F}_{simulation}+P_t-E_t+\Omega_t
+\Sigma_t+\mathcal F_{animation}+\mathcal F_{simulation}+P_t-E_t+\Omega_t
 \right].
 \]
 
-The browser runtime executes:
+At most four simulation substeps may execute per display frame. Excess accumulated time is discarded and recorded, preventing runaway catch-up after stalls.
 
-1. read clock and controls;
-2. evaluate the procedural field program;
-3. predict camera-centred brick demand;
-4. page in useful virtual regions;
-5. encode voxel semantics;
-6. evaluate prediction residuals;
-7. update `Ω`;
-8. write an instanced GPU working set;
-9. project through the camera;
-10. render the frame;
-11. optionally encode the canvas stream into WebM;
-12. advance time.
+## 6. Frame pipeline
 
-## 6. Rendering
+Each active cycle performs:
 
-The current implementation uses `THREE.InstancedMesh`, which avoids one draw call per voxel. The virtual field is sampled into at most 12,000 visible instances. This is an operational visualization of the sparse architecture, not a dense 8.59-billion-voxel renderer.
+1. acquire the display timestamp and user controls;
+2. advance the fixed-step accumulator;
+3. evaluate the selected procedural field program;
+4. predict camera-centred brick demand with velocity lead;
+5. page in useful virtual regions;
+6. encode 3-bit voxel semantics;
+7. calculate residual RMS;
+8. update `Ω` per active page;
+9. evict low-score pages above the residency limit;
+10. write the bounded GPU instance buffer;
+11. render the scene through the camera and lights;
+12. update frame, phase and paging telemetry;
+13. adapt effective quality against the selected frame budget;
+14. optionally capture the canvas to WebM;
+15. optionally export a JSON state snapshot.
 
-A production implementation can replace this layer with WebGPU compute shaders, sparse 3D textures, octree traversal, ray marching, meshlet extraction, or neural reconstruction while preserving the same virtual-memory contract.
+## 7. Adaptive quality gate
 
-## 7. Video output
+The requested voxel budget is an upper bound. The `Λ` quality gate lowers the effective budget when the frame-time EWMA exceeds the target and restores detail gradually when sufficient headroom returns.
 
-The 3D world is projected into a conventional 2D frame:
+The controller supports 30 FPS and 60 FPS targets, enforces a 512-instance minimum, and never exceeds the 12,000-instance GPU pool. A cooldown avoids rapid oscillation.
+
+## 8. Rendering and capture
+
+`THREE.InstancedMesh` represents the active field with one instanced draw structure rather than one JavaScript object per voxel. The current engine is an architectural visualization, not a dense renderer of all 8.59 billion cells.
+
+A production backend can replace the instanced renderer with WebGPU compute, sparse 3D textures, octree traversal, ray marching, meshlet extraction or neural reconstruction while preserving the same virtual-memory and state-transition contract.
+
+The 3D world is projected into a conventional frame:
 
 \[
-R_n \in \mathbb{R}^{W\times H\times4}.
+R_n\in\mathbb R^{W\times H\times4}.
 \]
 
-The browser captures the WebGL canvas using `captureStream(fps)` and writes a VP9, VP8, or generic WebM stream through `MediaRecorder`, depending on browser support.
+The recorder negotiates VP9, VP8 or generic WebM support at runtime. Codec output is browser-dependent and is not expected to be bit-identical across platforms.
 
-## 8. Invariants
+## 9. Telemetry and provenance
 
-- Never allocate the dense `2048³` state by default.
-- Virtual extent is independent of resident memory.
-- Paging, culling and level of detail precede rendering.
-- The frame clock is the single source of animation time.
-- `Ω` stores correction history, not an unverifiable claim of complete reality.
-- Capture records rendered output; it does not serialize the entire virtual world.
+The HUD reports:
+
+- display and simulation frame counters;
+- simulation time;
+- active pages and resident voxel instances;
+- requested and effective quality budgets;
+- residual RMS;
+- FPS and frame-time EWMA;
+- update and render phase times;
+- page hit rate, faults and evictions;
+- adaptive-quality state and simulation substep count.
+
+`Export Snapshot` writes a JSON record containing configuration, camera state, counters, timing values and sparse-memory statistics. `ARCHITECTURE_LOCK.json` stores the canonical invariants and the SHA-256 digest of the runtime HTML. The Git commit remains the authoritative provenance record.
+
+## 10. Failure containment
+
+- Dense `2048³` allocation is prohibited.
+- GPU instances and resident page metadata are bounded.
+- Large frame deltas are clamped.
+- Simulation catch-up is capped.
+- WebGL context loss pauses execution and is surfaced to the user.
+- Media recording support is checked before capture begins.
+- Missing CDN or WebGL capability produces a visible boot error.
+
+See [`PERFORMANCE_CONTRACT.md`](PERFORMANCE_CONTRACT.md) for measurement targets and benchmark procedure.
