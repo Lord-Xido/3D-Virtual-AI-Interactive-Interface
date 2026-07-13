@@ -57,11 +57,13 @@ The validator parses the inline runtime JavaScript, checks architectural invaria
 
 - `voxel-video-machine.html` — sparse 2048³ virtual video animation machine
 - `em-rom-engine.html` — original EM-ROM cognitive byte-agent visualization
+- [`native/hbp-vm/`](native/hbp-vm/) — C++17/OpenGL 3.3 humanoid bit-state VM with fixed-step execution, final Lambda projection and append-only Omega trace chaining
 
 ## Documentation
 
 - [`docs/VOXEL_VIDEO_MACHINE.md`](docs/VOXEL_VIDEO_MACHINE.md)
 - [`docs/PERFORMANCE_CONTRACT.md`](docs/PERFORMANCE_CONTRACT.md)
+- [`native/hbp-vm/README.md`](native/hbp-vm/README.md)
 
 ## Architectural distinction
 
