@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#01040b" />
+  <title>World Wide Web Virtual 3D ANN</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --cyan:#30e7ff; --violet:#a25cff; --green:#60ffb0; --pink:#ff4f93;
+      --amber:#ffc857; --panel:rgba(2,12,30,.92); --line:rgba(48,231,255,.38);
+      --muted:#86a9be; --ink:#eafcff;
+    }
+    * { box-sizing:border-box; }
+    html,body { width:100%; height:100%; margin:0; overflow:hidden; background:#01040b; font-family:Inter,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    button,input,textarea { font:inherit; }
+    canvas { display:block; width:100%; height:100%; }
+    #app { position:fixed; inset:0; }
+    .panel { position:fixed; z-index:10; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:14px; backdrop-filter:blur(14px); box-shadow:0 0 40px rgba(0,174,255,.12); padding:14px; }
+    #control { left:14px; top:14px; width:min(430px,calc(100vw - 28px)); max-height:calc(100vh - 28px); overflow:auto; }
+    #telemetry { right:14px; top:14px; width:360px; max-height:calc(100vh - 28px); overflow:auto; }
+    h1 { margin:0 0 4px; font-size:18px; letter-spacing:.04em; color:var(--cyan); }
+    .subtitle { color:var(--muted); font-size:11px; line-height:1.5; margin-bottom:10px; }
+    .status { display:flex; align-items:center; gap:7px; color:#a9c7d5; font-size:10px; margin-bottom:12px; }
+    .status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 12px var(--green); }
+    .status-dot.warn { background:var(--amber); box-shadow:0 0 12px var(--amber); }
+    .status-dot.error { background:var(--pink); box-shadow:0 0 12px var(--pink); }
+    .section { border-top:1px solid rgba(48,231,255,.18); padding-top:10px; margin-top:10px; }
+    .section-title { font-size:11px; color:var(--cyan); letter-spacing:.14em; margin-bottom:8px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+    button,input,textarea { width:100%; }
+    button { border:1px solid rgba(48,231,255,.4); color:#e9fcff; background:#061a31; border-radius:8px; padding:8px; font-size:11px; cursor:pointer; }
+    button:hover,button:focus-visible,input:focus-visible,textarea:focus-visible { border-color:var(--cyan); outline:none; background:#092847; }
+    button.active { color:#00131a; background:var(--cyan); }
+    label { display:block; color:#9db7c8; font-size:10px; margin:8px 0 3px; }
+    input[type="range"] { accent-color:var(--cyan); }
+    input[type="text"],textarea { border:1px solid rgba(48,231,255,.28); color:#e9fcff; background:#031426; border-radius:8px; padding:8px; font-size:10px; resize:vertical; }
+    textarea { min-height:58px; }
+    .value { float:right; color:#fff; }
+    .metric { display:flex; justify-content:space-between; gap:10px; padding:4px 0; font-size:11px; border-bottom:1px solid rgba(255,255,255,.045); }
+    .metric span:first-child { color:#83a8bb; }
+    .metric span:last-child { color:#effcff; text-align:right; }
+    .good { color:var(--green)!important; } .warn { color:var(--amber)!important; } .bad { color:var(--pink)!important; }
+    #pipeline { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:9px; }
+    .stage { padding:5px 6px; border:1px solid rgba(255,255,255,.08); border-radius:7px; color:#6f94a8; background:rgba(0,0,0,.18); font-size:9px; }
+    .stage.active { color:#001319; background:var(--cyan); border-color:var(--cyan); }
+    .stage.done { color:var(--green); border-color:rgba(96,255,176,.3); }
+    #log { margin-top:8px; padding:8px; min-height:92px; max-height:145px; overflow:auto; background:rgba(0,0,0,.25); border-radius:8px; font-size:9px; color:#86dff2; line-height:1.5; }
+    #legend { position:fixed; z-index:9; left:50%; bottom:14px; transform:translateX(-50%); color:#b8dbe8; background:rgba(1,8,18,.82); border:1px solid rgba(48,231,255,.24); border-radius:999px; padding:7px 14px; font-size:10px; white-space:nowrap; }
+    .dot { display:inline-block; width:7px; height:7px; margin:0 4px 0 10px; border-radius:50%; }
+    .note { margin-top:7px; color:#7699ad; font-size:9px; line-height:1.45; }
+    @media (max-width:1000px) { #telemetry { display:none; } #control { width:min(390px,calc(100vw - 28px)); } #legend { max-width:calc(100vw - 28px); overflow:hidden; text-overflow:ellipsis; } }
+    @media (max-width:540px) { #control { top:8px; left:8px; width:calc(100vw - 16px); max-height:58vh; } #legend { bottom:8px; font-size:8px; } }
+    @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important; } }
+  </style>
+</head>
+<body>
+<div id="app"><canvas id="scene" aria-label="Interactive three-dimensional auto-encoding neural network"></canvas></div>
+<section id="control" class="panel" aria-label="World Wide Web VANN controls">
+  <h1>WORLD WIDE WEB · 3D VANN</h1>
+  <div class="subtitle">Sparse Web-resource graph → 3D encoder → latent core → 3D decoder → residual Ω learning → Λ transaction gate</div>
+  <div class="status"><span id="statusDot" class="status-dot"></span><span id="statusText">BOOTING</span></div>
+  <div class="grid">
+    <button id="play">Pause</button><button id="step">Single Cycle</button>
+    <button id="inject">Inject Web Node</button><button id="pulse">Residual Pulse</button>
+    <button id="reset">Reset Engine</button><button id="snapshot">Export Snapshot</button>
+  </div>
+  <div class="section">
+    <div class="section-title">RESOURCE PACKET</div>
+    <label for="url">Resource identifier / URL</label>
+    <input id="url" type="text" value="https://example.org/knowledge/latent-geometry" />
+    <label for="content">Representation payload</label>
+    <textarea id="content">A graph-connected resource describing latent geometry, auto-encoding and deterministic runtime state.</textarea>
+    <div class="note">Remote fetching is intentionally not required. The browser encodes this local packet deterministically; same-origin or CORS-enabled resources can be represented by pasting their content.</div>
+  </div>
+  <div class="section">
+    <div class="section-title">LEARNING + GATE</div>
+    <label>Learning rate <span class="value" id="lrValue">0.018</span></label>
+    <input id="lr" type="range" min="0.001" max="0.06" step="0.001" value="0.018" />
+    <label>Λ maximum reconstruction loss <span class="value" id="lambdaValue">0.120</span></label>
+    <input id="lambda" type="range" min="0.03" max="0.35" step="0.005" value="0.12" />
+    <label>Cycle cadence <span class="value" id="cadenceValue">8.0 Hz</span></label>
+    <input id="cadence" type="range" min="1" max="20" step="1" value="8" />
+  </div>
+  <div class="section"><div class="section-title">RUNTIME JOURNAL</div><div id="log" aria-live="polite"></div></div>
+</section>
+<aside id="telemetry" class="panel" aria-label="World Wide Web VANN telemetry">
+  <div class="section-title">OPERATIONAL TELEMETRY</div>
+  <div class="metric"><span>Runtime</span><span>WWW-VANN 1.0.0</span></div>
+  <div class="metric"><span>Tensor topology</span><span>12 → 8 → 4 → 8 → 12</span></div>
+  <div class="metric"><span>Virtual 3D field</span><span>64 × 64 × 64 sparse</span></div>
+  <div class="metric"><span>Resources / graph edges</span><span id="graphMetric">0 / 0</span></div>
+  <div class="metric"><span>Cycle / active stage</span><span id="cycleMetric">0 / Observe</span></div>
+  <div class="metric"><span>Reconstruction MSE</span><span id="lossMetric">0.000000</span></div>
+  <div class="metric"><span>Ω correction norm</span><span id="omegaMetric">0.000000</span></div>
+  <div class="metric"><span>Λ gate</span><span id="lambdaMetric">OPEN</span></div>
+  <div class="metric"><span>Commits / rollbacks</span><span id="txMetric">0 / 0</span></div>
+  <div class="metric"><span>Commit ratio</span><span id="commitMetric">100.0%</span></div>
+  <div class="metric"><span>Active parameters</span><span id="parameterMetric">0</span></div>
+  <div class="metric"><span>FPS / frame time</span><span id="fpsMetric">0 / 0.0 ms</span></div>
+  <div class="metric"><span>Deterministic seed</span><span>0x4D4F4147</span></div>
+  <div class="section-title" style="margin-top:12px">15-STAGE TRANSACTIONAL PIPELINE</div>
+  <div id="pipeline"></div>
+</aside>
+<div id="legend">Web graph <span class="dot" style="background:#30e7ff"></span>encoder <span class="dot" style="background:#a25cff"></span>latent <span class="dot" style="background:#60ffb0"></span>decoder <span class="dot" style="background:#ffc857"></span>residual / rollback <span class="dot" style="background:#ff4f93"></span></div>
+<script>
+'use strict';
+
+const CONFIG=Object.freeze({
+  version:'1.0.0', seed:0x4d4f4147, input:12, hidden:8, latent:4,
+  fieldSize:64, maxResources:96, fixedStep:1/60, maxSubSteps:4,
+  omegaDecay:.965, omegaGain:.16, graphGain:.12, gradientClip:1.5
+});
+const STAGES=Object.freeze([
+  'Observe','Validate','Parse','Encode modality','Map 3D','Update graph','Activate sparse tile',
+  'Encode inward','Evolve latent','Decode outward','Calculate residual','Update Ω candidate',
+  'Project Λ','Buffer transaction','Commit / rollback'
+]);
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const sigmoid=x=>1/(1+Math.exp(-clamp(x,-30,30)));
+const tanh=x=>Math.tanh(clamp(x,-20,20));
+const mean=a=>a.reduce((s,v)=>s+v,0)/Math.max(1,a.length);
+const norm=a=>Math.sqrt(a.reduce((s,v)=>s+v*v,0));
+const cosine=(a,b)=>{const d=a.reduce((s,v,i)=>s+v*b[i],0);return d/(norm(a)*norm(b)+1e-9);};
+const downloadBlob=(blob,name)=>{const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);};
+
+class RNG {
+  constructor(seed){this.state=seed>>>0||1;}
+  nextU32(){let x=this.state;x^=x<<13;x^=x>>>17;x^=x<<5;this.state=x>>>0;return this.state;}
+  next(){return this.nextU32()/4294967296;}
+  signed(){return this.next()*2-1;}
+}
+
+const hashString=text=>{let h=2166136261>>>0;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619);}h+=h<<13;h^=h>>>7;h+=h<<3;h^=h>>>17;h+=h<<5;return h>>>0;};
+
+class DenseLayer {
+  constructor(input,output,rng,activation='tanh'){
+    this.input=input;this.output=output;this.activation=activation;
+    const scale=Math.sqrt(2/(input+output));
+    this.w=Array.from({length:output},()=>Array.from({length:input},()=>rng.signed()*scale));
+    this.b=Array(output).fill(0);this.lastInput=null;this.lastPre=null;this.lastOutput=null;
+  }
+  activate(x){return this.activation==='sigmoid'?sigmoid(x):tanh(x);}
+  derivative(out){return this.activation==='sigmoid'?out*(1-out):1-out*out;}
+  forward(input){
+    this.lastInput=input.slice();this.lastPre=Array(this.output);this.lastOutput=Array(this.output);
+    for(let o=0;o<this.output;o++){
+      let z=this.b[o];for(let i=0;i<this.input;i++)z+=this.w[o][i]*input[i];
+      this.lastPre[o]=z;this.lastOutput[o]=this.activate(z);
+    }
+    return this.lastOutput.slice();
+  }
+  backward(gradOutput,learningRate){
+    const gradInput=Array(this.input).fill(0);
+    for(let o=0;o<this.output;o++){
+      const delta=clamp(gradOutput[o]*this.derivative(this.lastOutput[o]),-CONFIG.gradientClip,CONFIG.gradientClip);
+      for(let i=0;i<this.input;i++){
+        gradInput[i]+=this.w[o][i]*delta;
+        this.w[o][i]-=learningRate*delta*this.lastInput[i];
+      }
+      this.b[o]-=learningRate*delta;
+    }
+    return gradInput;
+  }
+  snapshot(){return{w:this.w.map(row=>row.slice()),b:this.b.slice()};}
+  restore(state){this.w=state.w.map(row=>row.slice());this.b=state.b.slice();}
+  parameterCount(){return this.input*this.output+this.output;}
+}
+
+class AutoEncoder3D {
+  constructor(rng){
+    this.e1=new DenseLayer(CONFIG.input,CONFIG.hidden,rng,'tanh');
+    this.e2=new DenseLayer(CONFIG.hidden,CONFIG.latent,rng,'tanh');
+    this.d1=new DenseLayer(CONFIG.latent,CONFIG.hidden,rng,'tanh');
+    this.d2=new DenseLayer(CONFIG.hidden,CONFIG.input,rng,'sigmoid');
+    this.activations={input:Array(CONFIG.input).fill(0),h1:Array(CONFIG.hidden).fill(0),z:Array(CONFIG.latent).fill(0),h2:Array(CONFIG.hidden).fill(0),output:Array(CONFIG.input).fill(0)};
+  }
+  encode(input){this.activations.input=input.slice();this.activations.h1=this.e1.forward(input);this.activations.z=this.e2.forward(this.activations.h1);return this.activations.z.slice();}
+  decode(latent){this.activations.h2=this.d1.forward(latent);this.activations.output=this.d2.forward(this.activations.h2);return this.activations.output.slice();}
+  forward(input){return this.decode(this.encode(input));}
+  train(input,target,learningRate){
+    const output=this.forward(input);const grad=output.map((v,i)=>2*(v-target[i])/target.length);
+    let g=this.d2.backward(grad,learningRate);g=this.d1.backward(g,learningRate);g=this.e2.backward(g,learningRate);this.e1.backward(g,learningRate);
+    return output;
+  }
+  snapshot(){return{e1:this.e1.snapshot(),e2:this.e2.snapshot(),d1:this.d1.snapshot(),d2:this.d2.snapshot()};}
+  restore(s){this.e1.restore(s.e1);this.e2.restore(s.e2);this.d1.restore(s.d1);this.d2.restore(s.d2);}
+  parameterCount(){return this.e1.parameterCount()+this.e2.parameterCount()+this.d1.parameterCount()+this.d2.parameterCount();}
+}
+
+class WebResourceGraph {
+  constructor(){this.nodes=[];this.edges=[];this.nextId=1;}
+  add(packet){
+    const node={id:this.nextId++,url:packet.url,content:packet.content,features:packet.features.slice(),latent:Array(CONFIG.latent).fill(0),reconstruction:Array(CONFIG.input).fill(0),position:{x:0,y:0,z:0},trust:packet.features[3],permission:packet.features[4],loss:0,lastCycle:0};
+    this.nodes.push(node);if(this.nodes.length>CONFIG.maxResources)this.nodes.shift();this.rebuildEdges();return node;
+  }
+  rebuildEdges(){
+    this.edges=[];
+    for(let i=0;i<this.nodes.length;i++)for(let j=i+1;j<this.nodes.length;j++){
+      const similarity=cosine(this.nodes[i].features,this.nodes[j].features);
+      const linked=((hashString(this.nodes[i].url+'|'+this.nodes[j].url)&15)===0);
+      if(similarity>.93||linked)this.edges.push({a:this.nodes[i].id,b:this.nodes[j].id,weight:clamp((similarity-.75)*2.4+(linked?.14:0),.05,1)});
+    }
+  }
+  neighbors(node){
+    const result=[];
+    for(const edge of this.edges){
+      const id=edge.a===node.id?edge.b:edge.b===node.id?edge.a:null;
+      if(id!==null){const other=this.nodes.find(n=>n.id===id);if(other)result.push({node:other,weight:edge.weight});}
+    }
+    return result;
+  }
+  graphTarget(node){
+    const neighbors=this.neighbors(node);if(!neighbors.length)return node.features.slice();
+    const acc=Array(CONFIG.input).fill(0);let total=0;
+    for(const item of neighbors){for(let i=0;i<CONFIG.input;i++)acc[i]+=item.node.features[i]*item.weight;total+=item.weight;}
+    return node.features.map((v,i)=>clamp(v*(1-CONFIG.graphGain)+(acc[i]/Math.max(total,1e-9))*CONFIG.graphGain,0,1));
+  }
+}
+
+class TransactionalRuntime {
+  constructor(){this.reset();}
+  reset(){
+    this.rng=new RNG(CONFIG.seed);this.model=new AutoEncoder3D(this.rng);this.graph=new WebResourceGraph();
+    this.omega=Array(CONFIG.input).fill(0);this.running=true;this.stage=0;this.cycle=0;this.commits=0;this.rollbacks=0;this.loss=0;this.gateOpen=true;this.tx=null;this.stageClock=0;this.forceCycle=false;this.pulse=0;
+    for(let i=0;i<18;i++)this.injectSynthetic(i);
+    log('Booted deterministic WWW-VANN 1.0.0.');
+  }
+  encodePacket(url,content){
+    const text=(url+' '+content).trim();const h=hashString(text);const domain=(url.match(/^https?:\/\/([^/]+)/i)||[])[1]||'local';
+    const words=content.trim()?content.trim().split(/\s+/):[];const links=(content.match(/https?:\/\//g)||[]).length;
+    const unique=new Set(words.map(w=>w.toLowerCase())).size;
+    const nowPhase=((this.cycle%257)/256);
+    const features=[
+      clamp(words.length/90,0,1),clamp(links/8,0,1),clamp(unique/Math.max(1,words.length),0,1),
+      .55+((h>>>3)&255)/1024,.72+((h>>>11)&63)/256,clamp(.2+((h>>>17)&255)/512,0,1),
+      /json|api|schema/i.test(text)?.9:/image|video|audio/i.test(text)?.7:.45,
+      (hashString(domain)&1023)/1023,((h>>>2)&1023)/1023,((h>>>12)&1023)/1023,
+      nowPhase,clamp(.25+links*.08+words.length/240,0,1)
+    ];
+    return{url:url||`urn:local:${h.toString(16)}`,content,features:features.map(v=>clamp(v,0,1))};
+  }
+  inject(url,content){const node=this.graph.add(this.encodePacket(url,content));this.placeNode(node);log(`Injected resource #${node.id}: ${node.url}`);return node;}
+  injectSynthetic(i){
+    const topics=['latent-geometry','compiler-runtime','medical-guideline','electromagnetic-compute','distributed-memory','graph-learning'];
+    const topic=topics[i%topics.length];const url=`https://node${i%7}.example/${topic}/${i}`;
+    const content=`Synthetic resource ${i} on ${topic}. Links https://node${(i+1)%7}.example/${topics[(i+1)%topics.length]} with deterministic semantic and temporal metadata.`;
+    const node=this.graph.add(this.encodePacket(url,content));this.placeNode(node);return node;
+  }
+  placeNode(node){
+    const f=node.features;node.position={x:-11.5+(f[7]-.5)*2.2,y:(f[8]-.5)*11,z:(f[9]-.5)*11};
+  }
+  currentNode(){return this.tx?.node||this.graph.nodes[this.cycle%Math.max(1,this.graph.nodes.length)];}
+  pulseResidual(){this.pulse=1;for(let i=0;i<this.omega.length;i++)this.omega[i]=clamp(this.omega[i]+this.rng.signed()*.08,-.5,.5);log('Injected Ω residual pulse.');}
+  stageStep(){
+    const lr=Number(ui.lr.value);const lambdaMax=Number(ui.lambda.value);
+    switch(this.stage){
+      case 0:{const node=this.graph.nodes[this.cycle%this.graph.nodes.length];this.tx={node,valid:true,parsed:null,input:null,target:null,latent:null,prediction:null,residual:null,candidateOmega:null,preWeights:null,decision:false};break;}
+      case 1:{this.tx.valid=Boolean(this.tx.node&&this.tx.node.url&&this.tx.node.features.every(Number.isFinite));break;}
+      case 2:{this.tx.parsed={tokens:this.tx.node.content.trim().split(/\s+/).filter(Boolean).length,links:(this.tx.node.content.match(/https?:\/\//g)||[]).length};break;}
+      case 3:{this.tx.input=this.tx.node.features.map((v,i)=>clamp(v+this.omega[i]*.06,0,1));break;}
+      case 4:{this.placeNode(this.tx.node);break;}
+      case 5:{this.graph.rebuildEdges();this.tx.target=this.graph.graphTarget(this.tx.node);break;}
+      case 6:{this.tx.tile={x:Math.floor(this.tx.node.features[7]*63),y:Math.floor(this.tx.node.features[8]*63),z:Math.floor(this.tx.node.features[9]*63)};break;}
+      case 7:{this.tx.preWeights=this.model.snapshot();this.tx.latent=this.model.encode(this.tx.input);break;}
+      case 8:{this.tx.latent=this.tx.latent.map((v,i)=>clamp(v+this.omega[i%this.omega.length]*.045+Math.sin((this.cycle+i)*.17)*.006,-1,1));this.model.activations.z=this.tx.latent.slice();break;}
+      case 9:{this.tx.prediction=this.model.decode(this.tx.latent);break;}
+      case 10:{this.tx.residual=this.tx.target.map((v,i)=>v-this.tx.prediction[i]);this.loss=mean(this.tx.residual.map(v=>v*v));break;}
+      case 11:{
+        this.model.train(this.tx.input,this.tx.target,lr);
+        this.tx.candidateOmega=this.omega.map((v,i)=>clamp(v*CONFIG.omegaDecay+this.tx.residual[i]*CONFIG.omegaGain,-1,1));
+        break;
+      }
+      case 12:{
+        const provenance=this.tx.node.trust>=.5&&this.tx.node.permission>=.5;
+        this.tx.decision=this.tx.valid&&provenance&&Number.isFinite(this.loss)&&this.loss<=lambdaMax;
+        this.gateOpen=this.tx.decision;break;
+      }
+      case 13:{this.tx.buffer={resourceId:this.tx.node.id,loss:this.loss,latent:this.tx.latent.slice(),hash:hashString(JSON.stringify(this.tx.prediction)).toString(16),decision:this.tx.decision};break;}
+      case 14:{
+        if(this.tx.decision){
+          this.omega=this.tx.candidateOmega.slice();this.tx.node.latent=this.tx.latent.slice();this.tx.node.reconstruction=this.tx.prediction.slice();this.tx.node.loss=this.loss;this.tx.node.lastCycle=this.cycle;this.commits++;
+        }else{
+          this.model.restore(this.tx.preWeights);this.rollbacks++;
+        }
+        this.cycle++;this.tx=null;this.pulse*=.35;break;
+      }
+    }
+    this.stage=(this.stage+1)%STAGES.length;
+  }
+  update(dt){
+    if(!this.running&&!this.forceCycle)return;
+    const cadence=Number(ui.cadence.value);this.stageClock+=dt;
+    const interval=1/(cadence*STAGES.length);
+    while(this.stageClock>=interval){this.stageClock-=interval;this.stageStep();if(this.forceCycle&&this.stage===0){this.forceCycle=false;this.running=false;break;}}
+  }
+  singleCycle(){this.forceCycle=true;this.running=true;}
+  snapshot(){
+    return{runtime:'WWW-VANN',version:CONFIG.version,seed:CONFIG.seed,cycle:this.cycle,stage:STAGES[this.stage],resources:this.graph.nodes.length,edges:this.graph.edges.length,loss:this.loss,omega:this.omega,commits:this.commits,rollbacks:this.rollbacks,lambdaMaximum:Number(ui.lambda.value),learningRate:Number(ui.lr.value),modelParameters:this.model.parameterCount(),activeResource:this.currentNode()?.url||null,timestamp:new Date().toISOString()};
+  }
+}
+
+const canvas=document.getElementById('scene');const ctx=canvas.getContext('2d',{alpha:false});
+const ui={
+  play:document.getElementById('play'),step:document.getElementById('step'),inject:document.getElementById('inject'),pulse:document.getElementById('pulse'),reset:document.getElementById('reset'),snapshot:document.getElementById('snapshot'),
+  url:document.getElementById('url'),content:document.getElementById('content'),lr:document.getElementById('lr'),lambda:document.getElementById('lambda'),cadence:document.getElementById('cadence'),
+  lrValue:document.getElementById('lrValue'),lambdaValue:document.getElementById('lambdaValue'),cadenceValue:document.getElementById('cadenceValue'),statusDot:document.getElementById('statusDot'),statusText:document.getElementById('statusText'),
+  graphMetric:document.getElementById('graphMetric'),cycleMetric:document.getElementById('cycleMetric'),lossMetric:document.getElementById('lossMetric'),omegaMetric:document.getElementById('omegaMetric'),lambdaMetric:document.getElementById('lambdaMetric'),txMetric:document.getElementById('txMetric'),commitMetric:document.getElementById('commitMetric'),parameterMetric:document.getElementById('parameterMetric'),fpsMetric:document.getElementById('fpsMetric'),pipeline:document.getElementById('pipeline')
+};
+const logElement=document.getElementById('log');
+function log(message){const row=document.createElement('div');row.textContent=`[${new Date().toLocaleTimeString()}] ${message}`;logElement.prepend(row);while(logElement.children.length>16)logElement.lastChild.remove();}
+
+for(const [i,name] of STAGES.entries()){const cell=document.createElement('div');cell.className='stage';cell.dataset.stage=String(i);cell.textContent=`${String(i+1).padStart(2,'0')} ${name}`;ui.pipeline.appendChild(cell);}
+
+let runtime=new TransactionalRuntime();
+let width=1,height=1,dpr=1,yaw=-.22,pitch=.08,zoom=47,drag=false,lastPointer={x:0,y:0};
+function resize(){dpr=Math.min(2,window.devicePixelRatio||1);width=innerWidth;height=innerHeight;canvas.width=Math.floor(width*dpr);canvas.height=Math.floor(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+addEventListener('resize',resize);resize();
+canvas.addEventListener('pointerdown',e=>{drag=true;lastPointer={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-lastPointer.x)*.006;pitch=clamp(pitch+(e.clientY-lastPointer.y)*.004,-1.1,1.1);lastPointer={x:e.clientX,y:e.clientY};});
+canvas.addEventListener('pointerup',()=>{drag=false;});
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=clamp(zoom-e.deltaY*.025,25,85);},{passive:false});
+
+function rotatePoint(p){
+  const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const x=p.x*cy-p.z*sy;const z1=p.x*sy+p.z*cy;const y=p.y*cp-z1*sp;const z=p.y*sp+z1*cp;
+  return{x,y,z};
+}
+function project(p){const r=rotatePoint(p);const depth=zoom+r.z+24;const scale=Math.min(width,height)*.74/Math.max(12,depth);return{x:width*.5+r.x*scale,y:height*.52-r.y*scale,scale,depth,z:r.z};}
+function layerPositions(x,count,radius){return Array.from({length:count},(_,i)=>{const a=(i/count)*Math.PI*2;const ring=i%2?1:.72;return{x,y:Math.cos(a)*radius*ring,z:Math.sin(a)*radius*ring};});}
+const layers=[layerPositions(-8,CONFIG.input,5.7),layerPositions(-4,CONFIG.hidden,4.7),layerPositions(0,CONFIG.latent,2.2),layerPositions(4,CONFIG.hidden,4.7),layerPositions(8,CONFIG.input,5.7)];
+const layerColors=['#30e7ff','#a25cff','#60ffb0','#ffc857','#ff9ec3'];
+function drawLine(a,b,color,alpha=.2,widthPx=1){const pa=project(a),pb=project(b);if(pa.depth<2||pb.depth<2)return;ctx.strokeStyle=color;ctx.globalAlpha=alpha;ctx.lineWidth=widthPx;ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();ctx.globalAlpha=1;}
+function drawNode(p,r,color,alpha=1,stroke=null){const q=project(p);if(q.depth<2)return;const radius=clamp(r*q.scale*.13,1.5,12);ctx.globalAlpha=alpha;ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=10;ctx.beginPath();ctx.arc(q.x,q.y,radius,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();}ctx.globalAlpha=1;}
+function drawCube(size,color,alpha){const s=size/2;const pts=[[-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],[-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s]].map(([x,y,z])=>({x,y,z}));const edges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];for(const [a,b] of edges)drawLine(pts[a],pts[b],color,alpha,.8);}
+function connectionLayers(a,b,weights,color){
+  const activations=runtime.model.activations;const keyA=['input','h1','z','h2'][a];const keyB=['h1','z','h2','output'][a];
+  for(let i=0;i<layers[a].length;i++)for(let j=0;j<layers[b].length;j++){
+    const weight=Math.abs(weights[j][i]);const activity=Math.abs((activations[keyA]?.[i]||0)*(activations[keyB]?.[j]||0));
+    if(weight<.11&&activity<.06)continue;drawLine(layers[a][i],layers[b][j],color,clamp(.025+weight*.11+activity*.16,.025,.32),clamp(.4+weight*.65,.4,1.4));
+  }
+}
+function drawGraph(){
+  const byId=new Map(runtime.graph.nodes.map(n=>[n.id,n]));
+  for(const e of runtime.graph.edges){const a=byId.get(e.a),b=byId.get(e.b);if(a&&b)drawLine(a.position,b.position,'#30e7ff',.04+e.weight*.14,.5);}
+  for(const n of runtime.graph.nodes){const active=runtime.currentNode()?.id===n.id;drawNode(n.position,active?.22:.13,active?'#ffffff':'#30e7ff',active?1:.48,active?'#30e7ff':null);}
+}
+function drawParticles(time){
+  const stage=runtime.stage;const lane=clamp(stage/(STAGES.length-1),0,1);const x=lerp(-11,11,lane);for(let i=0;i<10;i++){
+    const phase=(time*.25+i/10)%1;const px=lerp(-11,11,(phase+lane*.18)%1);const p={x:px,y:Math.sin(time*1.7+i)*1.3,z:Math.cos(time*1.2+i*.9)*1.3};drawNode(p,.08,stage>=10?'#ff4f93':'#60ffb0',.65);
+  }
+  drawNode({x,y:0,z:0},.15,runtime.gateOpen?'#60ffb0':'#ff4f93',1);
+}
+function drawScene(time){
+  ctx.fillStyle='#01040b';ctx.fillRect(0,0,width,height);
+  const gradient=ctx.createRadialGradient(width*.5,height*.5,0,width*.5,height*.5,Math.max(width,height)*.62);gradient.addColorStop(0,'rgba(12,42,72,.32)');gradient.addColorStop(1,'rgba(1,4,11,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,width,height);
+  drawCube(25,'#30e7ff',.055);drawCube(7,'#60ffb0',.14);drawGraph();
+  connectionLayers(0,1,runtime.model.e1.w,'#30e7ff');connectionLayers(1,2,runtime.model.e2.w,'#a25cff');connectionLayers(2,3,runtime.model.d1.w,'#60ffb0');connectionLayers(3,4,runtime.model.d2.w,'#ffc857');
+  const acts=[runtime.model.activations.input,runtime.model.activations.h1,runtime.model.activations.z,runtime.model.activations.h2,runtime.model.activations.output];
+  for(let l=0;l<layers.length;l++)for(let i=0;i<layers[l].length;i++){const a=Math.abs(acts[l]?.[i]||0);drawNode(layers[l][i],.13+a*.12,layerColors[l],.45+a*.55);}
+  drawParticles(time);
+  ctx.fillStyle='rgba(195,235,246,.48)';ctx.font='10px ui-monospace, monospace';ctx.textAlign='center';
+  [['WEB GRAPH',-10.8],['ENCODE 12→8',-6],['LATENT 4³ CORE',0],['DECODE 8→12',6],['VERIFIED OUTPUT',10.8]].forEach(([text,x])=>{const p=project({x,y:-7.2,z:0});ctx.fillText(text,p.x,p.y);});
+}
+function updateTelemetry(frameMs){
+  ui.graphMetric.textContent=`${runtime.graph.nodes.length} / ${runtime.graph.edges.length}`;
+  ui.cycleMetric.textContent=`${runtime.cycle} / ${STAGES[runtime.stage]}`;
+  ui.lossMetric.textContent=runtime.loss.toFixed(6);ui.omegaMetric.textContent=norm(runtime.omega).toFixed(6);
+  ui.lambdaMetric.textContent=runtime.gateOpen?'OPEN · COMMIT':'CLOSED · ROLLBACK';ui.lambdaMetric.className=runtime.gateOpen?'good':'bad';
+  ui.txMetric.textContent=`${runtime.commits} / ${runtime.rollbacks}`;const total=runtime.commits+runtime.rollbacks;ui.commitMetric.textContent=`${(100*runtime.commits/Math.max(1,total)).toFixed(1)}%`;
+  ui.parameterMetric.textContent=runtime.model.parameterCount().toLocaleString();ui.fpsMetric.textContent=`${(1000/Math.max(1,frameMs)).toFixed(0)} / ${frameMs.toFixed(1)} ms`;
+  ui.statusText.textContent=runtime.running?'PERMEATING':'PAUSED';ui.statusDot.className=`status-dot${runtime.gateOpen?'':' error'}`;ui.play.textContent=runtime.running?'Pause':'Resume';
+  for(const cell of ui.pipeline.children){const i=Number(cell.dataset.stage);cell.className=`stage${i===runtime.stage?' active':i<runtime.stage?' done':''}`;}
+}
+
+ui.play.addEventListener('click',()=>{runtime.running=!runtime.running;});
+ui.step.addEventListener('click',()=>runtime.singleCycle());
+ui.inject.addEventListener('click',()=>runtime.inject(ui.url.value.trim(),ui.content.value));
+ui.pulse.addEventListener('click',()=>runtime.pulseResidual());
+ui.reset.addEventListener('click',()=>{runtime=new TransactionalRuntime();});
+ui.snapshot.addEventListener('click',()=>downloadBlob(new Blob([JSON.stringify(runtime.snapshot(),null,2)],{type:'application/json'}),`www-vann-snapshot-${Date.now()}.json`));
+ui.lr.addEventListener('input',()=>ui.lrValue.textContent=Number(ui.lr.value).toFixed(3));
+ui.lambda.addEventListener('input',()=>ui.lambdaValue.textContent=Number(ui.lambda.value).toFixed(3));
+ui.cadence.addEventListener('input',()=>ui.cadenceValue.textContent=`${Number(ui.cadence.value).toFixed(1)} Hz`);
+addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body){e.preventDefault();runtime.running=!runtime.running;}if(e.key.toLowerCase()==='p')runtime.pulseResidual();if(e.key.toLowerCase()==='s')runtime.singleCycle();});
+
+let last=performance.now(),accumulator=0,frameEwma=16.7;
+function frame(now){
+  const raw=Math.min(.25,(now-last)/1000);last=now;accumulator+=raw;let substeps=0;
+  while(accumulator>=CONFIG.fixedStep&&substeps<CONFIG.maxSubSteps){runtime.update(CONFIG.fixedStep);accumulator-=CONFIG.fixedStep;substeps++;}
+  if(substeps===CONFIG.maxSubSteps&&accumulator>=CONFIG.fixedStep)accumulator=0;
+  if(!drag)yaw+=raw*.055;
+  drawScene(now/1000);frameEwma=frameEwma+(raw*1000-frameEwma)*.08;updateTelemetry(frameEwma);requestAnimationFrame(frame);
+}
+ui.lr.dispatchEvent(new Event('input'));ui.lambda.dispatchEvent(new Event('input'));ui.cadence.dispatchEvent(new Event('input'));
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
