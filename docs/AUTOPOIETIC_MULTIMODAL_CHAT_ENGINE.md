@@ -40,6 +40,12 @@ Input text
 - Default learning rate: `0.05`
 - Deterministic seed: `0x4D4F4147`
 
+## Inward-turn architecture
+
+The recursive optimization extension is documented separately in [`INWARD_TURN_META_LOOP.md`](INWARD_TURN_META_LOOP.md).
+
+That note defines the authorized-state serialization, isolated candidate fork, verification gate, atomic root selection and measured acceleration model. It also distinguishes a requested compression ratio from a physically realizable speedup and enforces a minimum executable work unit.
+
 ## Main classes
 
 - `RNG` — seeded xorshift32 random-number generator
