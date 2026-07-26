@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <title>Autopoietic Multimodal Chat Engine — Deterministic Simulation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --green:#00ff66; --cyan:#00eeff; --magenta:#ff38ff; --yellow:#ffe85c;
+      --panel:#00120a; --panel2:#001c12; --line:rgba(0,255,102,.52); --muted:#78a890;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html,body { width:100%; height:100%; overflow:hidden; background:#000; color:var(--green); font-family:"Courier New",monospace; }
+    body { display:flex; }
+    button,textarea { font:inherit; }
+    #left-panel,#right-panel { width:50%; min-width:0; }
+    #left-panel { position:relative; border-right:2px solid var(--green); }
+    #canvas-container { width:100%; height:60%; position:relative; background:#000; }
+    #canvas-container canvas { width:100%; height:100%; display:block; }
+    #multimodal-output { height:40%; display:flex; flex-direction:column; overflow:hidden; background:#001100; border-top:2px solid var(--cyan); }
+    #multimodal-tabs { display:flex; overflow-x:auto; background:#002200; border-bottom:1px solid var(--green); }
+    .tab { padding:10px 18px; cursor:pointer; white-space:nowrap; border-right:1px solid var(--green); transition:.2s; }
+    .tab:hover { background:#003300; }
+    .tab.active { background:#004400; color:var(--cyan); }
+    .tab-content { display:none; flex:1; padding:12px; overflow:auto; }
+    .tab-content.active { display:block; }
+    #visual-canvas,#audio-canvas { width:100%; height:100%; min-height:150px; display:block; background:#000; border:1px solid var(--green); }
+    #right-panel { display:flex; flex-direction:column; background:#000; }
+    #chat-header { padding:14px; text-align:center; background:#002200; border-bottom:2px solid var(--green); }
+    #chat-header h2 { color:var(--cyan); font-size:16px; margin-bottom:5px; }
+    #engine-status { font-size:11px; color:var(--green); }
+    #chat-messages { flex:1; overflow:auto; padding:15px; background:#001100; }
+    .message { margin-bottom:14px; padding:10px; border-radius:5px; animation:fadeIn .25s; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+    .message.user { background:#003300; border-left:3px solid var(--green); }
+    .message.ai { background:#002233; border-left:3px solid var(--cyan); }
+    .message.system { background:#332200; border-left:3px solid var(--yellow); font-style:italic; }
+    .message-header { margin-bottom:5px; color:#8a9a92; font-size:10px; }
+    .message-content { font-size:13px; line-height:1.5; white-space:pre-wrap; }
+    .message-multimodal { margin-top:9px; padding:8px; background:#000; border:1px solid var(--green); border-radius:3px; }
+    .modal-output { margin:4px 0; padding:4px 6px; background:#000; border-left:2px solid var(--cyan); font-size:11px; }
+    .modal-output.text { border-color:var(--green); } .modal-output.visual { border-color:var(--magenta); }
+    .modal-output.audio { border-color:var(--yellow); } .modal-output.code { border-color:var(--cyan); }
+    #chat-input-container { padding:14px; background:#002200; border-top:2px solid var(--green); }
+    #chat-input { width:100%; padding:10px; resize:none; color:var(--green); background:#000; border:1px solid var(--green); font-size:13px; }
+    #chat-input:focus { outline:none; border-color:var(--cyan); }
+    #send-btn,#snapshot-btn { width:100%; padding:10px; margin-top:9px; color:var(--green); background:#000; border:1px solid var(--green); cursor:pointer; transition:.2s; }
+    #send-btn:hover,#snapshot-btn:hover { background:var(--green); color:#000; }
+    #send-btn:disabled { opacity:.45; cursor:not-allowed; }
+    #metrics-panel,#evolution-indicator,#bytecode-stream { position:absolute; z-index:100; padding:10px; font-size:10px; background:rgba(0,20,0,.95); }
+    #metrics-panel { top:10px; right:10px; width:210px; border:2px solid var(--cyan); }
+    #metrics-panel h3 { margin-bottom:8px; color:var(--cyan); font-size:11px; }
+    .metric { margin-bottom:5px; } .metric-value { color:var(--yellow); font-weight:bold; }
+    #evolution-indicator { left:10px; bottom:10px; max-width:330px; border:2px solid var(--magenta); }
+    #evolution-indicator h4 { margin-bottom:5px; color:var(--magenta); }
+    #bytecode-stream { right:10px; bottom:10px; width:280px; max-height:155px; overflow:auto; border:2px solid var(--green); }
+    #bytecode-stream h4 { margin-bottom:5px; font-size:10px; }
+    .bytecode-line { margin:1px 0; color:#00aa44; }
+    .thinking { display:inline-block; animation:pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity:.3; } }
+    pre { white-space:pre-wrap; word-break:break-word; }
+    .scope-note { margin-top:6px; color:var(--muted); font-size:9px; line-height:1.4; }
+    @media (max-width:900px) {
+      body { display:block; overflow:auto; }
+      #left-panel,#right-panel { width:100%; height:100vh; }
+      #left-panel { border-right:0; border-bottom:2px solid var(--green); }
+      #metrics-panel { width:185px; }
+      #bytecode-stream { width:230px; }
+    }
+    @media (max-width:560px) {
+      #metrics-panel { display:none; }
+      #bytecode-stream { width:calc(100% - 20px); max-height:90px; }
+      #evolution-indicator { max-width:calc(100% - 20px); bottom:110px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="left-panel">
+    <div id="canvas-container"></div>
+    <div id="multimodal-output">
+      <div id="multimodal-tabs">
+        <div class="tab active" data-tab="visual">🎨 Visual</div>
+        <div class="tab" data-tab="audio">🔊 Audio</div>
+        <div class="tab" data-tab="code">💻 Code</div>
+        <div class="tab" data-tab="data">📊 Data</div>
+      </div>
+      <div id="visual-tab" class="tab-content active"><canvas id="visual-canvas"></canvas></div>
+      <div id="audio-tab" class="tab-content"><canvas id="audio-canvas"></canvas></div>
+      <div id="code-tab" class="tab-content"><pre id="code-output" style="color:#0ff;font-size:11px"></pre></div>
+      <div id="data-tab" class="tab-content"><pre id="data-output" style="color:#0f0;font-size:11px"></pre></div>
+    </div>
+    <div id="metrics-panel">
+      <h3>🧠 Engine Metrics</h3>
+      <div class="metric">Evolution Cycle: <span class="metric-value" id="m-cycle">0</span></div>
+      <div class="metric">Core Activation: <span class="metric-value" id="m-activation">0.000</span></div>
+      <div class="metric">Residual RMS: <span class="metric-value" id="m-residual">0.000</span></div>
+      <div class="metric">Semantic Coherence: <span class="metric-value" id="m-coherence">0.000</span></div>
+      <div class="metric">Modal Diversity: <span class="metric-value" id="m-diversity">0.000</span></div>
+      <div class="metric">Learning Rate: <span class="metric-value" id="m-lr">0.050</span></div>
+      <div class="metric">Deterministic Seed: <span class="metric-value">0x4D4F4147</span></div>
+    </div>
+    <div id="evolution-indicator">
+      <h4>🧬 Evolution State</h4>
+      <div id="evolution-text">Initializing deterministic multimodal pathways…</div>
+    </div>
+    <div id="bytecode-stream"><h4>⚡ Live Bytecode</h4><div id="bytecode-log"></div></div>
+  </div>
+
+  <div id="right-panel">
+    <div id="chat-header">
+      <h2>🤖 Autopoietic Multimodal Chat Engine</h2>
+      <div id="engine-status">Status: <span class="thinking">●</span> Deterministic Simulation | Mode: Multimodal Synthesis</div>
+      <div class="scope-note">This browser demo evolves a bounded local voxel state. It is not a deployed autonomous general intelligence and does not rewrite its own executable code.</div>
+    </div>
+    <div id="chat-messages">
+      <div class="message system">
+        <div class="message-header">SYSTEM</div>
+        <div class="message-content">The engine maps each message into a deterministic 3D voxel perturbation, compiles a local 60-value latent bytecode vector, measures reconstruction error, applies a bounded correction step, and renders text, visual, waveform, code, and data outputs.</div>
+      </div>
+    </div>
+    <div id="chat-input-container">
+      <textarea id="chat-input" rows="3" placeholder="Enter a message for deterministic multimodal processing…"></textarea>
+      <button id="send-btn">🚀 Send &amp; Evolve</button>
+      <button id="snapshot-btn">💾 Export Runtime Snapshot</button>
+    </div>
+  </div>
+
+  <script>
+  'use strict';
+
+  const CONFIG=Object.freeze({version:'2.0.0',seed:0x4d4f4147,gridSize:8,bytecodeWidth:60,maxLogLines:30,learningRate:.05,cyclesPerMessage:5});
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const rms=values=>Math.sqrt(values.reduce((sum,v)=>sum+v*v,0)/Math.max(1,values.length));
+  const hashString=text=>{let h=2166136261>>>0;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619);}h+=h<<13;h^=h>>>7;h+=h<<3;h^=h>>>17;h+=h<<5;return h>>>0;};
+  const download=(name,text)=>{const blob=new Blob([text],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+
+  class RNG {
+    constructor(seed){this.state=seed>>>0||1;}
+    nextU32(){let x=this.state;x^=x<<13;x^=x>>>17;x^=x<<5;this.state=x>>>0;return this.state;}
+    next(){return this.nextU32()/4294967296;}
+    signed(){return this.next()*2-1;}
+    fork(salt){return new RNG((this.state^hashString(String(salt)))>>>0);}
+  }
+
+  class MultimodalVoxel {
+    constructor(x,y,z,rng){
+      this.x=x;this.y=y;this.z=z;this.activation=0;this.semanticBias=rng.signed()*.35;this.spatialTension=0;
+      this.modalChannels={text:rng.next(),visual:rng.next(),audio:rng.next(),code:rng.next()};
+      this.neighborWeights=Array.from({length:6},()=>.08+rng.next()*.08);this.mesh=null;this.normalizeChannels();
+    }
+    normalizeChannels(){const total=Object.values(this.modalChannels).reduce((a,b)=>a+b,0)||1;for(const key in this.modalChannels)this.modalChannels[key]=clamp(this.modalChannels[key]/total,0,1);}
+    getActivationColor(){return new THREE.Color(clamp(.15+Math.abs(this.activation)*.85,0,1),clamp(.15+this.semanticBias*.5,0,1),clamp(.25+1-this.spatialTension*.08,0,1));}
+    getDominantModal(){return Object.entries(this.modalChannels).sort((a,b)=>b[1]-a[1])[0][0];}
+  }
+
+  class MultimodalLattice {
+    constructor(dimX,dimY,dimZ,rng){this.dimX=dimX;this.dimY=dimY;this.dimZ=dimZ;this.voxels=[];this.scene=null;for(let x=0;x<dimX;x++)for(let y=0;y<dimY;y++)for(let z=0;z<dimZ;z++)this.voxels.push(new MultimodalVoxel(x,y,z,rng));}
+    index(x,y,z){return x*this.dimY*this.dimZ+y*this.dimZ+z;}
+    at(x,y,z){return x<0||x>=this.dimX||y<0||y>=this.dimY||z<0||z>=this.dimZ?null:this.voxels[this.index(x,y,z)];}
+    createVisualization(scene){
+      this.scene=scene;const geometry=new THREE.BoxGeometry(.78,.78,.78);
+      for(const v of this.voxels){const material=new THREE.MeshPhongMaterial({color:v.getActivationColor(),transparent:true,opacity:.74});const mesh=new THREE.Mesh(geometry,material);mesh.position.set((v.x-(this.dimX-1)/2)*1.15,(v.y-(this.dimY-1)/2)*1.15,(v.z-(this.dimZ-1)/2)*1.15);v.mesh=mesh;scene.add(mesh);}
+    }
+    applyPhysicalBackprop(learningRate){
+      for(const v of this.voxels){
+        const correction=clamp(learningRate*v.spatialTension,-.18,.18);v.semanticBias=clamp(v.semanticBias-correction,-1.25,1.25);v.activation=Math.tanh(v.semanticBias);
+        const base=Math.abs(v.activation);v.modalChannels.text=.15+Math.abs(Math.sin(v.semanticBias*2.1));v.modalChannels.visual=.15+Math.abs(Math.sin(v.semanticBias*3.2+.7));v.modalChannels.audio=.15+Math.abs(Math.sin(v.semanticBias*4.3+1.4));v.modalChannels.code=.15+Math.abs(Math.sin(v.semanticBias*5.4+2.1));
+        v.modalChannels.text+=base*.15;v.normalizeChannels();v.spatialTension*=.12;
+      }
+    }
+    updateVisualization(){for(const v of this.voxels){if(!v.mesh)continue;v.mesh.material.color.copy(v.getActivationColor());const scale=clamp(.72+Math.abs(v.activation)*.45,.58,1.2);v.mesh.scale.setScalar(scale);}}
+    getCoreVoxel(x,y,z){return this.at(x,y,z);}
+    getModalDistribution(x,y,z){const core=this.getCoreVoxel(x,y,z);return core?{...core.modalChannels}:{text:.25,visual:.25,audio:.25,code:.25};}
+  }
+
+  class MultimodalCompiler {
+    compileRegion(lattice,cx,cy,cz){
+      const bytecode=Array(CONFIG.bytecodeWidth).fill(0);
+      for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)for(let dz=-1;dz<=1;dz++){
+        const v=lattice.at(cx+dx,cy+dy,cz+dz);if(!v)continue;const w=1/(1+Math.abs(dx)+Math.abs(dy)+Math.abs(dz));
+        bytecode[0]+=v.activation*w;bytecode[1]+=v.semanticBias*w;bytecode[2]+=v.modalChannels.text*w;bytecode[3]+=v.modalChannels.visual*w;bytecode[4]+=v.modalChannels.audio*w;bytecode[5]+=v.modalChannels.code*w;
+        for(let i=6;i<bytecode.length;i++)bytecode[i]+=(v.activation*v.semanticBias*w)/(i+1);
+      }
+      return bytecode.map(v=>clamp(v,-8,8));
+    }
+  }
+
+  class MultimodalInterpreter {
+    interpretAndMutate(lattice,bytecode,cx,cy,cz){
+      const center=lattice.at(cx,cy,cz);if(!center)return;
+      center.activation=Math.tanh(bytecode[0]*.18);center.semanticBias=clamp(center.semanticBias+bytecode[1]*.004,-1.25,1.25);
+      center.modalChannels={text:Math.abs(bytecode[2]),visual:Math.abs(bytecode[3]),audio:Math.abs(bytecode[4]),code:Math.abs(bytecode[5])};center.normalizeChannels();
+      const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      for(let i=0;i<dirs.length;i++){const d=dirs[i],n=lattice.at(cx+d[0],cy+d[1],cz+d[2]);if(n)n.activation=clamp(n.activation+center.activation*center.neighborWeights[i],-1,1);}
+    }
+  }
+
+  class MultimodalFeedback {
+    constructor(compiler){this.compiler=compiler;}
+    calculateSpatialError(lattice,predicted,cx,cy,cz){
+      const actual=this.compiler.compileRegion(lattice,cx,cy,cz);const residual=predicted.map((v,i)=>v-actual[i]);const error=rms(residual);const center=lattice.at(cx,cy,cz);if(!center)return error;
+      center.spatialTension=clamp(center.spatialTension+error,0,4);const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+      for(let i=0;i<dirs.length;i++){const d=dirs[i],n=lattice.at(cx+d[0],cy+d[1],cz+d[2]);if(n)n.spatialTension=clamp(n.spatialTension+error*center.neighborWeights[i]*.4,0,4);}
+      return error;
+    }
+  }
+
+  class MultimodalGenerator {
+    constructor(){this.visualCanvas=document.getElementById('visual-canvas');this.visualCtx=this.visualCanvas.getContext('2d');this.audioCanvas=document.getElementById('audio-canvas');this.audioCtx=this.audioCanvas.getContext('2d');this.resizeObserver=new ResizeObserver(()=>this.resizeCanvases());this.resizeObserver.observe(document.getElementById('multimodal-output'));this.resizeCanvases();}
+    resizeCanvas(canvas){const rect=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));const context=canvas.getContext('2d');context.setTransform(dpr,0,0,dpr,0,0);return{width:rect.width,height:rect.height};}
+    resizeCanvases(){this.visualSize=this.resizeCanvas(this.visualCanvas);this.audioSize=this.resizeCanvas(this.audioCanvas);}
+    generateTextResponse(input,modal,activation,cycle){
+      const candidates=[
+        'Your input was encoded into the local 3D lattice and propagated through the six-neighbour field.',
+        'The deterministic feedback loop compiled the active region, compared it with the mutated state, and applied a bounded correction.',
+        'The core voxel has rebalanced its modal channels in response to the message fingerprint.',
+        'The local latent bytecode now reflects the semantic perturbation introduced by your message.'
+      ];
+      const base=candidates[hashString(input+'|'+cycle)%candidates.length];const dominant=Object.entries(modal).sort((a,b)=>b[1]-a[1])[0][0];
+      return `${base} Dominant channel: ${dominant.toUpperCase()} (${(modal[dominant]*100).toFixed(1)}%). Core activation: ${activation.toFixed(3)}.`;
+    }
+    generateVisualPattern(modal,activation,seed){
+      const ctx=this.visualCtx,{width,height}=this.visualSize;ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);const rng=new RNG(seed);const complexity=8+Math.floor(Math.abs(activation)*18);const hue=(modal.visual*360+seed%120)%360;const points=[];
+      for(let i=0;i<complexity;i++){const a=i*.73+activation*5,r=.16+(.28*rng.next());const x=width*(.5+Math.sin(a)*r),y=height*(.5+Math.cos(a*1.31)*r);points.push({x,y});ctx.beginPath();ctx.arc(x,y,8+modal.visual*38*rng.next(),0,Math.PI*2);ctx.fillStyle=`hsla(${hue+i*11},100%,55%,.22)`;ctx.fill();}
+      ctx.strokeStyle=`hsla(${hue},100%,72%,.58)`;ctx.lineWidth=1;ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();
+    }
+    generateAudioWaveform(modal,activation,seed){
+      const ctx=this.audioCtx,{width,height}=this.audioSize;ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);const frequency=1.5+modal.audio*11+(seed%7)*.1,amplitude=Math.abs(activation)*height*.32,center=height/2;ctx.strokeStyle=`hsl(${modal.audio*360},100%,55%)`;ctx.lineWidth=2;ctx.beginPath();
+      for(let x=0;x<width;x++){const t=x/Math.max(1,width),y=center+Math.sin(t*frequency*Math.PI*2)*amplitude*(.65+.35*Math.sin(t*Math.PI));x?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();
+      const bars=32,rng=new RNG(seed^0xa5a5a5a5);for(let i=0;i<bars;i++){const h=(.08+rng.next()*.92)*Math.abs(activation)*height*.28;ctx.fillStyle=`hsla(${i*10},100%,55%,.5)`;ctx.fillRect(i*width/bars,height-h,width/bars-2,h);}
+    }
+    generateCodeSnippet(modal,activation){return `// Deterministic local multimodal state\nconst modal = ${JSON.stringify(Object.fromEntries(Object.entries(modal).map(([k,v])=>[k,Number(v.toFixed(4))])),null,2)};\nconst coreActivation = ${activation.toFixed(6)};\n\nfunction evolveVoxel(voxel, residual, learningRate) {\n  const correction = Math.max(-0.18, Math.min(0.18, learningRate * residual));\n  voxel.semanticBias = Math.max(-1.25, Math.min(1.25, voxel.semanticBias - correction));\n  voxel.activation = Math.tanh(voxel.semanticBias);\n  return voxel;\n}`;}
+    generateData(modal,activation,cycle,residual){return JSON.stringify({runtime:'Autopoietic Multimodal Chat Engine',version:CONFIG.version,simulation:true,evolution_cycle:cycle,modal_distribution:modal,lattice_activation:activation,residual_rms:residual,semantic_coherence:(modal.text+modal.visual)/2,creative_diversity:(modal.audio+modal.code)/2,timestamp:new Date().toISOString()},null,2);}
+  }
+
+  class AutopoieticChatEngine {
+    constructor(gridSize){this.rng=new RNG(CONFIG.seed);this.lattice=new MultimodalLattice(gridSize,gridSize,gridSize,this.rng);this.compiler=new MultimodalCompiler();this.interpreter=new MultimodalInterpreter();this.feedback=new MultimodalFeedback(this.compiler);this.generator=new MultimodalGenerator();this.cycleCount=0;this.learningRate=CONFIG.learningRate;this.lastResidual=0;this.cx=Math.floor(gridSize/2);this.cy=Math.floor(gridSize/2);this.cz=Math.floor(gridSize/2);this.conversationHistory=[];}
+    processInput(input){
+      const inputHash=hashString(input);const core=this.lattice.getCoreVoxel(this.cx,this.cy,this.cz);const signed=((inputHash&0xffff)/32767.5)-1;core.semanticBias=clamp(core.semanticBias+signed*.12,-1.25,1.25);core.spatialTension=clamp(core.spatialTension+.5,0,4);
+      for(let i=0;i<CONFIG.cyclesPerMessage;i++)this.runCycle();const modal=this.lattice.getModalDistribution(this.cx,this.cy,this.cz),activation=core.activation;
+      const response={text:this.generator.generateTextResponse(input,modal,activation,this.cycleCount),code:this.generator.generateCodeSnippet(modal,activation),data:this.generator.generateData(modal,activation,this.cycleCount,this.lastResidual),modalDistribution:modal,activation,seed:inputHash};
+      this.generator.generateVisualPattern(modal,activation,inputHash);this.generator.generateAudioWaveform(modal,activation,inputHash);this.conversationHistory.push({input,response:{text:response.text,modalDistribution:modal,activation}});if(this.conversationHistory.length>50)this.conversationHistory.shift();return response;
+    }
+    runCycle(){
+      this.cycleCount++;const bytecode=this.compiler.compileRegion(this.lattice,this.cx,this.cy,this.cz);this.interpreter.interpretAndMutate(this.lattice,bytecode,this.cx,this.cy,this.cz);this.lastResidual=this.feedback.calculateSpatialError(this.lattice,bytecode,this.cx,this.cy,this.cz);this.lattice.applyPhysicalBackprop(this.learningRate);this.lattice.updateVisualization();
+      addBytecodeLog(`C${String(this.cycleCount).padStart(4,'0')} ENC ${bytecode.slice(0,6).map(v=>v.toFixed(3)).join(' ')} | RMS ${this.lastResidual.toFixed(5)}`);return{cycle:this.cycleCount,bytecode,error:this.lastResidual};
+    }
+    getEvolutionText(){const core=this.lattice.getCoreVoxel(this.cx,this.cy,this.cz),modal=core.getDominantModal();return `Cycle ${this.cycleCount}: ${modal.toUpperCase()} channel dominant; residual ${this.lastResidual.toFixed(5)}; bounded correction active.`;}
+    snapshot(){const core=this.lattice.getCoreVoxel(this.cx,this.cy,this.cz);return{runtime:'Autopoietic Multimodal Chat Engine',version:CONFIG.version,simulation:true,seed:CONFIG.seed,grid:[CONFIG.gridSize,CONFIG.gridSize,CONFIG.gridSize],voxel_count:this.lattice.voxels.length,cycle:this.cycleCount,learning_rate:this.learningRate,last_residual_rms:this.lastResidual,core:{activation:core.activation,semantic_bias:core.semanticBias,spatial_tension:core.spatialTension,modal_channels:{...core.modalChannels}},conversation_count:this.conversationHistory.length,timestamp:new Date().toISOString()};}
+  }
+
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0x000000);const camera=new THREE.PerspectiveCamera(60,1,.1,1000);camera.position.set(15,13,15);camera.lookAt(0,0,0);
+  const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(2,devicePixelRatio||1));const container=document.getElementById('canvas-container');container.appendChild(renderer.domElement);
+  scene.add(new THREE.AmbientLight(0x404040,1.15));const directionalLight=new THREE.DirectionalLight(0xffffff,.9);directionalLight.position.set(10,12,10);scene.add(directionalLight);const pointLight=new THREE.PointLight(0x00ffff,1,100);scene.add(pointLight);
+  const resizeRenderer=()=>{const width=Math.max(1,container.clientWidth),height=Math.max(1,container.clientHeight);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();};new ResizeObserver(resizeRenderer).observe(container);resizeRenderer();
+
+  const engine=new AutopoieticChatEngine(CONFIG.gridSize);engine.lattice.createVisualization(scene);
+  const chatMessages=document.getElementById('chat-messages'),chatInput=document.getElementById('chat-input'),sendBtn=document.getElementById('send-btn');
+  function addMessage(type,content,response=null){const message=document.createElement('div');message.className=`message ${type}`;const header=document.createElement('div');header.className='message-header';header.textContent=type==='user'?'YOU':type==='ai'?'AI ENGINE':'SYSTEM';const body=document.createElement('div');body.className='message-content';body.textContent=content;message.append(header,body);if(response&&type==='ai'){const box=document.createElement('div');box.className='message-multimodal';for(const [name,icon] of [['text','📝'],['visual','🎨'],['audio','🔊'],['code','💻']]){const row=document.createElement('div');row.className=`modal-output ${name}`;row.textContent=`${icon} ${name[0].toUpperCase()+name.slice(1)}: ${(response.modalDistribution[name]*100).toFixed(1)}%`;box.appendChild(row);}message.appendChild(box);}chatMessages.appendChild(message);chatMessages.scrollTop=chatMessages.scrollHeight;}
+  function sendMessage(){const input=chatInput.value.trim();if(!input)return;addMessage('user',input);chatInput.value='';sendBtn.disabled=true;requestAnimationFrame(()=>{const response=engine.processInput(input);addMessage('ai',response.text,response);document.getElementById('code-output').textContent=response.code;document.getElementById('data-output').textContent=response.data;document.getElementById('evolution-text').textContent=engine.getEvolutionText();sendBtn.disabled=false;chatInput.focus();});}
+  sendBtn.addEventListener('click',sendMessage);chatInput.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}});document.getElementById('snapshot-btn').addEventListener('click',()=>download(`autopoietic-engine-snapshot-${Date.now()}.json`,JSON.stringify(engine.snapshot(),null,2)));
+  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.tab,.tab-content').forEach(el=>el.classList.remove('active'));tab.classList.add('active');document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');engine.generator.resizeCanvases();}));
+
+  function addBytecodeLog(message){const log=document.getElementById('bytecode-log'),line=document.createElement('div');line.className='bytecode-line';line.textContent=`[${new Date().toISOString().slice(11,19)}] ${message}`;log.prepend(line);while(log.children.length>CONFIG.maxLogLines)log.lastChild.remove();}
+  addBytecodeLog(`Runtime ${CONFIG.version} initialized`);addBytecodeLog(`Lattice ${CONFIG.gridSize}×${CONFIG.gridSize}×${CONFIG.gridSize} = ${CONFIG.gridSize**3} voxels`);addBytecodeLog(`Bytecode width ${CONFIG.bytecodeWidth} float channels`);addBytecodeLog('Deterministic bounded evolution active');
+
+  let last=performance.now(),frameMs=16.7;
+  function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,(now-last)/1000);last=now;const time=now*.0001;camera.position.x=Math.sin(time)*20;camera.position.z=Math.cos(time)*20;camera.position.y=12+Math.sin(time*.7)*3;camera.lookAt(0,0,0);pointLight.intensity=.65+Math.sin(now*.002)*.3;renderer.render(scene,camera);frameMs+=((dt*1000)-frameMs)*.08;
+    const core=engine.lattice.getCoreVoxel(engine.cx,engine.cy,engine.cz),modal=core.modalChannels;document.getElementById('m-cycle').textContent=engine.cycleCount;document.getElementById('m-activation').textContent=core.activation.toFixed(3);document.getElementById('m-residual').textContent=engine.lastResidual.toFixed(3);document.getElementById('m-coherence').textContent=((modal.text+modal.visual)/2).toFixed(3);document.getElementById('m-diversity').textContent=((modal.audio+modal.code)/2).toFixed(3);document.getElementById('m-lr').textContent=engine.learningRate.toFixed(3);
+  }
+  requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
