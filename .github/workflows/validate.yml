@@ -1,4 +1,4 @@
-name: Validate voxel runtime
+name: Validate visual engines
 
 on:
   push:
@@ -8,13 +8,24 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: visual-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   contract:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
         with:
-          node-version: '22'
-      - name: Validate syntax and architecture lock
+          node-version: '24'
+
+      - name: Validate voxel architecture lock
         run: node scripts/validate.mjs
+
+      - name: Validate DM-vOmegaXi numerical contract
+        run: node scripts/validate-dm-vomegaxi.mjs
