@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dr. Moagi State Equation — Minimal Geometric Instance</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #05070b;
+      color: #c8d0e0;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      overflow: hidden;
+      height: 100vh;
+    }
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    #hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      background: rgba(8, 12, 20, 0.82);
+      border: 1px solid rgba(100, 160, 255, 0.25);
+      border-radius: 10px;
+      padding: 14px 18px;
+      max-width: 360px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+      pointer-events: none;
+    }
+    #hud h1 {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #7eb8ff;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+    #hud .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      line-height: 1.55;
+      margin-bottom: 3px;
+    }
+    #hud .label { color: #8899aa; }
+    #hud .value { color: #e8f0ff; font-variant-numeric: tabular-nums; }
+    #hud .loss { color: #ff9a6c; font-weight: 600; }
+    #hud .alpha { color: #7dffb3; }
+    #legend {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      z-index: 10;
+      background: rgba(8, 12, 20, 0.82);
+      border: 1px solid rgba(100, 160, 255, 0.25);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 11px;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+    #legend .item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    #legend .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    #controls {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #controls button {
+      background: rgba(20, 30, 50, 0.9);
+      border: 1px solid rgba(100, 160, 255, 0.35);
+      color: #c8d0e0;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    #controls button:hover {
+      background: rgba(40, 60, 100, 0.95);
+      border-color: rgba(120, 180, 255, 0.6);
+    }
+    #controls button.active {
+      background: rgba(30, 80, 140, 0.95);
+      border-color: #7eb8ff;
+      color: #fff;
+    }
+    #footer {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      z-index: 10;
+      font-size: 10px;
+      color: #556677;
+      text-align: right;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="hud">
+    <h1>Dr. Moagi State Equation</h1>
+    <div class="row"><span class="label">t</span><span class="value" id="t-val">0.00</span></div>
+    <div class="row"><span class="label">α(t)</span><span class="value alpha" id="alpha-val">1.000</span></div>
+    <div class="row"><span class="label">ℒ(t)</span><span class="value loss" id="loss-val">0.000</span></div>
+    <div class="row"><span class="label">Z</span><span class="value" id="z-val">(2.25, 2.80, 3.15)</span></div>
+    <div class="row"><span class="label">μ</span><span class="value" id="mu-val">(2.50, 3.50, 4.50)</span></div>
+  </div>
+
+  <div id="legend">
+    <div class="item"><span class="swatch" style="background:#4fc3f7"></span> P₁ input</div>
+    <div class="item"><span class="swatch" style="background:#81c784"></span> P₂ input</div>
+    <div class="item"><span class="swatch" style="background:#ffb74d"></span> Centroid μ</div>
+    <div class="item"><span class="swatch" style="background:#e57373"></span> Latent Z</div>
+    <div class="item"><span class="swatch" style="background:#ba68c8"></span> Reconstructed P′₁ / P′₂</div>
+    <div class="item"><span class="swatch" style="background:#90caf9"></span> Homotopy particles</div>
+    <div class="item"><span class="swatch" style="background:#546e7a"></span> Inversion sphere R=5.8</div>
+  </div>
+
+  <div id="controls">
+    <button id="btn-pause" class="active">Pause</button>
+    <button id="btn-invert">Toggle Inversion</button>
+    <button id="btn-trails">Toggle Trails</button>
+    <button id="btn-reset">Reset View</button>
+  </div>
+
+  <div id="footer">
+    Jarvis-X · Dr. Moagi minimal instance<br>
+    span{P′₁,P′₂} = span{Z, Δ} · ∀t
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    // ─── Constants from the State Equation ───────────────────────────────
+    const P1 = new THREE.Vector3(1, 2, 3);
+    const P2 = new THREE.Vector3(4, 5, 6);
+    const MU = new THREE.Vector3().addVectors(P1, P2).multiplyScalar(0.5);
+    const DELTA = new THREE.Vector3().subVectors(P1, P2).multiplyScalar(0.5);
+    const S = new THREE.Vector3(0.9, 0.8, 0.7); // diagonal compression
+    const Z0 = new THREE.Vector3(MU.x * S.x, MU.y * S.y, MU.z * S.z);
+    const EPSILON = 0.05;
+    const OMEGA_A = 0.3;
+    const SPHERE_R = 5.8;
+
+    // ─── Scene setup ─────────────────────────────────────────────────────
+    const container = document.getElementById("canvas-container");
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070b);
+    scene.fog = new THREE.FogExp2(0x05070b, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(9.5, 6.5, 11);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.copy(MU);
+    controls.minDistance = 3;
+    controls.maxDistance = 40;
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0x334455, 0.55));
+    const key = new THREE.DirectionalLight(0xaaccff, 1.1);
+    key.position.set(5, 10, 7);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffaa88, 0.35);
+    fill.position.set(-6, 2, -4);
+    scene.add(fill);
+    const rim = new THREE.PointLight(0x6688ff, 0.6, 30);
+    rim.position.set(0, 8, -5);
+    scene.add(rim);
+
+    // Grid + axes helper (subtle)
+    const grid = new THREE.GridHelper(16, 16, 0x1a2535, 0x121820);
+    grid.position.y = -0.01;
+    scene.add(grid);
+
+    // ─── Geometry helpers ────────────────────────────────────────────────
+    function makeSphere(radius, color, opacity = 1) {
+      const geo = new THREE.SphereGeometry(radius, 24, 18);
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.35,
+        metalness: 0.15,
+        transparent: opacity < 1,
+        opacity,
+        emissive: color,
+        emissiveIntensity: 0.18
+      });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    function makeLine(points, color, linewidth = 1) {
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+      return new THREE.Line(geo, mat);
+    }
+
+    // Input points
+    const meshP1 = makeSphere(0.18, 0x4fc3f7);
+    meshP1.position.copy(P1);
+    scene.add(meshP1);
+
+    const meshP2 = makeSphere(0.18, 0x81c784);
+    meshP2.position.copy(P2);
+    scene.add(meshP2);
+
+    // Centroid
+    const meshMu = makeSphere(0.14, 0xffb74d);
+    meshMu.position.copy(MU);
+    scene.add(meshMu);
+
+    // Latent Z
+    const meshZ = makeSphere(0.16, 0xe57373);
+    meshZ.position.copy(Z0);
+    scene.add(meshZ);
+
+    // Reconstructed points (will move)
+    const meshPp1 = makeSphere(0.15, 0xba68c8);
+    scene.add(meshPp1);
+    const meshPp2 = makeSphere(0.15, 0xba68c8);
+    scene.add(meshPp2);
+
+    // Lines: original span, latent offset, reconstruction span
+    const lineOrig = makeLine([P1, P2], 0x4fc3f7);
+    scene.add(lineOrig);
+
+    const lineMuZ = makeLine([MU, Z0], 0xff8a65);
+    scene.add(lineMuZ);
+
+    let lineRecon = makeLine([P1, P2], 0xba68c8);
+    scene.add(lineRecon);
+
+    // Inversion sphere (wireframe)
+    const sphereGeo = new THREE.SphereGeometry(SPHERE_R, 48, 32);
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color: 0x546e7a,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.18
+    });
+    const inversionSphere = new THREE.Mesh(sphereGeo, sphereMat);
+    scene.add(inversionSphere);
+
+    // Homotopy particles
+    const N_PARTICLES = 48;
+    const particles = [];
+    const particleGroup = new THREE.Group();
+    scene.add(particleGroup);
+
+    for (let i = 0; i < N_PARTICLES; i++) {
+      const p = makeSphere(0.045, 0x90caf9, 0.85);
+      particleGroup.add(p);
+      particles.push({
+        mesh: p,
+        phase: (i / N_PARTICLES) * Math.PI * 2,
+        omega: 0.35 + (i % 7) * 0.04,
+        isEncoder: i < N_PARTICLES / 2,
+        fromP1: i % 2 === 0
+      });
+    }
+
+    // Trail system (simple history rings)
+    const trailGroup = new THREE.Group();
+    scene.add(trailGroup);
+    let showTrails = true;
+    const trailHistory = [];
+    const MAX_TRAIL = 90;
+
+    // ─── Math helpers ────────────────────────────────────────────────────
+    function alpha(t) {
+      return 1 + EPSILON * Math.sin(OMEGA_A * t);
+    }
+
+    function loss(a) {
+      const dx = (1 - 0.9 * a) * MU.x;
+      const dy = (1 - 0.8 * a) * MU.y;
+      const dz = (1 - 0.7 * a) * MU.z;
+      return 2 * Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    function smoothstep(s) {
+      return s * s * (3 - 2 * s);
+    }
+
+    function applyInversion(v, out) {
+      const len = v.length();
+      if (len < 1e-6) {
+        out.set(0, 0, 0);
+        return out;
+      }
+      // Soft clamp toward sphere surface for visual fold
+      const scale = SPHERE_R / Math.max(len, SPHERE_R * 0.15);
+      out.copy(v).multiplyScalar(Math.min(scale, 1.35));
+      return out;
+    }
+
+    // ─── State ───────────────────────────────────────────────────────────
+    let t = 0;
+    let paused = false;
+    let useInversion = false;
+    const tmp = new THREE.Vector3();
+    const tmp2 = new THREE.Vector3();
+    const pp1 = new THREE.Vector3();
+    const pp2 = new THREE.Vector3();
+
+    // HUD elements
+    const elT = document.getElementById("t-val");
+    const elA = document.getElementById("alpha-val");
+    const elL = document.getElementById("loss-val");
+    const elZ = document.getElementById("z-val");
+    const elMu = document.getElementById("mu-val");
+
+    elMu.textContent = `(${MU.x.toFixed(2)}, ${MU.y.toFixed(2)}, ${MU.z.toFixed(2)})`;
+    elZ.textContent = `(${Z0.x.toFixed(2)}, ${Z0.y.toFixed(2)}, ${Z0.z.toFixed(2)})`;
+
+    // Controls
+    document.getElementById("btn-pause").addEventListener("click", (e) => {
+      paused = !paused;
+      e.target.textContent = paused ? "Play" : "Pause";
+      e.target.classList.toggle("active", !paused);
+    });
+
+    document.getElementById("btn-invert").addEventListener("click", (e) => {
+      useInversion = !useInversion;
+      e.target.classList.toggle("active", useInversion);
+      inversionSphere.material.opacity = useInversion ? 0.32 : 0.18;
+    });
+
+    document.getElementById("btn-trails").addEventListener("click", (e) => {
+      showTrails = !showTrails;
+      trailGroup.visible = showTrails;
+      e.target.classList.toggle("active", showTrails);
+    });
+
+    document.getElementById("btn-reset").addEventListener("click", () => {
+      camera.position.set(9.5, 6.5, 11);
+      controls.target.copy(MU);
+      controls.update();
+    });
+
+    // ─── Animation loop ──────────────────────────────────────────────────
+    const clock = new THREE.Clock();
+    let lastTrail = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      if (!paused) t += dt;
+
+      const a = alpha(t);
+      const L = loss(a);
+
+      // Reconstructed points
+      pp1.copy(Z0).multiplyScalar(a).add(DELTA);
+      pp2.copy(Z0).multiplyScalar(a).sub(DELTA);
+
+      // Apply optional inversion for display
+      if (useInversion) {
+        applyInversion(P1, tmp); meshP1.position.copy(tmp);
+        applyInversion(P2, tmp); meshP2.position.copy(tmp);
+        applyInversion(MU, tmp); meshMu.position.copy(tmp);
+        applyInversion(Z0, tmp); meshZ.position.copy(tmp);
+        applyInversion(pp1, tmp); meshPp1.position.copy(tmp);
+        applyInversion(pp2, tmp); meshPp2.position.copy(tmp);
+      } else {
+        meshP1.position.copy(P1);
+        meshP2.position.copy(P2);
+        meshMu.position.copy(MU);
+        meshZ.position.copy(Z0);
+        meshPp1.position.copy(pp1);
+        meshPp2.position.copy(pp2);
+      }
+
+      // Update reconstruction line
+      scene.remove(lineRecon);
+      lineRecon.geometry.dispose();
+      const r1 = useInversion ? applyInversion(pp1, tmp).clone() : pp1.clone();
+      const r2 = useInversion ? applyInversion(pp2, tmp2).clone() : pp2.clone();
+      lineRecon = makeLine([r1, r2], 0xba68c8);
+      scene.add(lineRecon);
+
+      // Homotopy particles
+      for (const p of particles) {
+        const s = 0.5 * (Math.sin(p.omega * t + p.phase) + 1);
+        const tau = smoothstep(s);
+
+        let start, end;
+        if (p.isEncoder) {
+          start = p.fromP1 ? P1 : P2;
+          end = Z0;
+        } else {
+          start = Z0;
+          end = p.fromP1 ? pp1 : pp2;
+        }
+
+        tmp.lerpVectors(start, end, tau);
+        if (useInversion) applyInversion(tmp, tmp);
+        p.mesh.position.copy(tmp);
+
+        // Subtle size pulse with loss
+        const scale = 0.9 + 0.35 * Math.min(L / 3, 1);
+        p.mesh.scale.setScalar(scale);
+      }
+
+      // Trails (sample reconstructed points)
+      if (showTrails && t - lastTrail > 0.04) {
+        lastTrail = t;
+        const tr1 = meshPp1.position.clone();
+        const tr2 = meshPp2.position.clone();
+        trailHistory.push({ p1: tr1, p2: tr2, age: 0 });
+        if (trailHistory.length > MAX_TRAIL) {
+          const old = trailHistory.shift();
+        }
+        // Rebuild simple trail points as a line strip occasionally
+        while (trailGroup.children.length > 0) {
+          const c = trailGroup.children.pop();
+          c.geometry?.dispose();
+          c.material?.dispose();
+        }
+        if (trailHistory.length > 2) {
+          const pts1 = trailHistory.map(h => h.p1);
+          const pts2 = trailHistory.map(h => h.p2);
+          const l1 = makeLine(pts1, 0xba68c8);
+          l1.material.opacity = 0.35;
+          const l2 = makeLine(pts2, 0xce93d8);
+          l2.material.opacity = 0.35;
+          trailGroup.add(l1, l2);
+        }
+      }
+
+      // HUD
+      elT.textContent = t.toFixed(2);
+      elA.textContent = a.toFixed(4);
+      elL.textContent = L.toFixed(4);
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Resize
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Keyboard
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        document.getElementById("btn-pause").click();
+      }
+    });
+
+    animate();
+  </script>
+</body>
+</html>
